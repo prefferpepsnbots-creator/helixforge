@@ -1,80 +1,27 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
+import OpenAI from "openai";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 /**
- * Mock AI Coaching API route — Week 3 deliverable.
+ * AI Coaching API route — streams real OpenAI responses token-by-token.
  *
- * In production, replace with actual AI API call (OpenAI / Anthropic).
- * The system prompt includes the user's genetic context for personalized answers.
+ * System prompt is built from the user's genetic profile stored in Supabase,
+ * making responses personalized to their specific gene variants and protocol phase.
  *
- * Streaming is implemented using ReadableStream so the frontend can
- * display responses token-by-token for a natural feel.
+ * Streaming via ReadableStream ensures the frontend displays tokens as they arrive,
+ * giving a natural conversational feel rather than waiting for the full response.
  */
 
-// Mock coach responses — simulates what an AI trained on peptide/genomics would say
 function buildSystemPrompt(userContext: Record<string, unknown>): string {
   return `You are HelixForge AI Coach, a knowledgeable assistant specializing in peptide therapy optimization, genetic nutrition, and evidence-based strength training.
 
 Your guidance is for educational purposes only. Always remind users to consult their licensed physician before making changes to their health protocol.
 
-User context:
-${JSON.stringify(userContext, null, 2)}
+User genetic/protocol context:
+${Object.keys(userContext).length > 0 ? JSON.stringify(userContext, null, 2) : "No genetic profile uploaded yet."}
 
 Be specific, cite mechanisms of action, and reference the user's genetic profile when relevant.`;
-}
-
-const MOCK_RESPONSES: string[] = [
-  `Great question about BPC-157 and training integration!
-
-Based on your BDKB2 variant (rs8017985), you show heightened peptide sensitivity — this means you may respond exceptionally well to lower BPC-157 doses compared to the standard protocol.
-
-**Recommended approach for training days:**
-- Inject BPC-157 subcutaneously near the target tissue 30-60 minutes BEFORE training
-- Your sensitivity profile suggests 250-350mcg may be optimal (not the typical 500mcg)
-- The TB-500 you stack with it works synergistically on cell migration pathways
-
-**Important:** Given your MTHFR variant (slow methylation), ensure you're taking methylated B-complex vitamins alongside your peptide protocol. Non-methylated B-vitamins may not be efficiently utilized by your biochemistry.
-
-Always coordinate dosing with your physician.`,
-  `Your ACTN3 + ACE genetic profile is fascinating for programming purposes!
-
-**Power-endurance hybrid typing** means you have both fast-twitch dominance (ACTN3) and endurance-favoring ACE expression. This is actually ideal for compound lifting progression.
-
-**Training recommendation:**
-- Your power ceiling is high — prioritize compound movements (squat, deadlift, bench)
-- Volume tolerance may be slightly reduced vs pure endurance types
-- Accumulation/intensity undulating periodization aligns well with your genes
-
-**Peptide timing on training days:**
-BPC-157 30-60 min pre-workout on your heavy days (weeks 1-4)
-TB-500 on recovery days
-
-Shall I break down your 90-day periodization based on this genetic profile?`,
-];
-
-function getMockResponse(message: string): string {
-  const msg = message.toLowerCase();
-  if (msg.includes("bpc") || msg.includes("training") || msg.includes("dose")) {
-    return MOCK_RESPONSES[0];
-  }
-  if (msg.includes("actn3") || msg.includes("ace") || msg.includes("training") || msg.includes("program")) {
-    return MOCK_RESPONSES[1];
-  }
-  return `Thanks for your question!
-
-To give you the most accurate guidance, I'll need to reference your specific genetic profile. Your BDKB2 sensitivity mapping and MTHFR methylation status are particularly relevant here.
-
-**For your current protocol phase (Foundation Weeks 1-4):**
-
-The priority is ensuring your body has the foundational support for peptide pathway activation. This means:
-1. Adequate protein intake (1.8-2.2g/kg lean mass)
-2. Methylated B-vitamins if MTHFR variant is present
-3. Consistent sleep (7-9 hours — critical for tissue repair)
-
-When you're ready to discuss specific peptide stacking, training periodization, or nutrition timing, just ask!
-
-*Note: All protocol changes should be discussed with your physician.*`;
 }
 
 export async function POST(req: NextRequest) {
@@ -85,74 +32,92 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { message } = body as {
-      message: string;
-    };
+    const { message } = body as { message: string };
 
     if (!message?.trim()) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
 
-    // Load user context from Supabase (protocol, gene variants)
+    if (message.length > 2000) {
+      return NextResponse.json({ error: "Message too long (max 2000 chars)" }, { status: 400 });
+    }
+
+    // Load user context from Supabase (genetic profile, protocol phase)
     let userContext: Record<string, unknown> = {};
     try {
       const supabase = createServiceRoleClient();
       const { data: protocol } = await supabase
         .from("protocols")
-        .select("signal_kit_report")
+        .select("signal_kit_report, phase, status")
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
-      if (protocol?.signal_kit_report) {
-        userContext = protocol.signal_kit_report as Record<string, unknown>;
+      if (protocol) {
+        userContext = {
+          ...(protocol.signal_kit_report as Record<string, unknown> ?? {}),
+          protocol_phase: protocol.phase,
+          protocol_status: protocol.status,
+        };
       }
     } catch {
       // Non-fatal — proceed without user context
     }
 
-    const _systemPrompt = buildSystemPrompt(userContext);
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      // Fall back to graceful error rather than crashing
+      return NextResponse.json(
+        { error: "AI coaching not configured. Set OPENAI_API_KEY in environment." },
+        { status: 503 }
+      );
+    }
 
-    // In production: stream from OpenAI/Anthropic
-    // const response = await openai.chat.completions.create({
-    //   model: "gpt-4o",
-    //   messages: [{ role: "system", content: systemPrompt }, ...history, { role: "user", content: message }],
-    //   stream: true,
-    // });
-    // return new Response(response.toReadableStream(), { headers: { 'Content-Type': 'text/event-stream' } });
+    const openai = new OpenAI({ apiKey });
 
-    // Mock streaming response — simulates token-by-token output
-    const mockText = getMockResponse(message);
-    const fullResponse = `${mockText}\n\n---\n*AI Coach response · Verify all protocol changes with your licensed physician*`;
+    const stream = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: buildSystemPrompt(userContext) },
+        { role: "user", content: message },
+      ],
+      stream: true,
+      max_tokens: 800,
+      temperature: 0.7,
+    });
 
-    const stream = new ReadableStream({
+    // Convert OpenAI streaming to Web Streams API (Next.js compatible)
+    const readable = new ReadableStream({
       async start(controller) {
         const encoder = new TextEncoder();
-        const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-        // Stream word by word for natural feel
-        const words = fullResponse.split(" ");
-        for (let i = 0; i < words.length; i++) {
-          controller.enqueue(encoder.encode(words[i] + (i < words.length - 1 ? " " : "")));
-          await delay(18 + Math.random() * 12); // 18-30ms per word
+        try {
+          for await (const chunk of stream) {
+            const text = chunk.choices[0]?.delta?.content ?? "";
+            if (text) {
+              controller.enqueue(encoder.encode(text));
+            }
+          }
+        } catch (err) {
+          controller.error(err);
+        } finally {
+          controller.close();
         }
-        controller.close();
       },
     });
 
-    // Also save the session to Supabase (fire-and-forget)
+    // Save the session to Supabase asynchronously (fire-and-forget)
+    const sessionText = message; // capture for closure
     createServiceRoleClient()
       .from("coaching_sessions")
       .insert({
         user_id: userId,
-        message,
-        ai_response: { text: mockText },
-        created_at: new Date().toISOString(),
+        message: sessionText,
+        ai_response: { model: "gpt-4o-mini", streamed: true },
       })
       .then(({ error }) => {
-        if (error) console.warn("[coaching/chat] Session save failed:", error);
+        if (error) console.warn("[coaching/chat] Session save failed:", error.message);
       });
 
-    return new Response(stream, {
+    return new Response(readable, {
       headers: {
         "Content-Type": "text/plain",
         "Cache-Control": "no-cache",
@@ -161,6 +126,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("[coaching/chat]", err);
-    return NextResponse.json({ error: "Chat failed" }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Chat failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

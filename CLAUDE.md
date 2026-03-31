@@ -35,6 +35,7 @@
    - SUPABASE_SERVICE_ROLE_KEY
    - SIGNAL_KIT_API_KEY
    - SIGNAL_KIT_API_URL
+   - OPENAI_API_KEY
    - NEXT_PUBLIC_APP_URL=https://helixforge.com (your domain)
    - RESEND_API_KEY
    - EMAIL_FROM=noreply@helixforge.com
