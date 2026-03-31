@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 export function GlobalErrorClient({
   error,
   reset,
@@ -21,12 +23,12 @@ export function GlobalErrorClient({
           >
             Try again
           </button>
-          <a
+          <Link
             href="/"
             className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-6 py-3 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-muted"
           >
             Back to home
-          </a>
+          </Link>
         </div>
       </div>
     </div>

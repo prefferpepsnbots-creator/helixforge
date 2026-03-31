@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   Dna,
   Dumbbell,
@@ -13,12 +12,10 @@ import {
 } from "lucide-react";
 import { LandingNav } from "@/components/landing-nav";
 import { LandingFooter } from "@/components/landing-footer";
-import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { cn } from "@/lib/utils";
 
 const FAQ_ITEMS = [
   {
@@ -190,9 +187,9 @@ export default function LandingPage() {
                   270,000+ Gene-Peptide-Pathway Connections
                 </h2>
                 <p className="text-muted-foreground text-lg leading-relaxed mb-6">
-                  Your genetic variants don't exist in isolation. The Signal Kit maps your unique
+                  Your genetic variants don&apos;t exist in isolation. The Signal Kit maps your unique
                   gene expression patterns to peptide mechanisms of action — giving you a protocol
-                  that's statistically optimized for your biology, not the average case.
+                  that&apos;s statistically optimized for your biology, not the average case.
                 </p>
 
                 <div className="space-y-4">
@@ -474,7 +471,7 @@ export default function LandingPage() {
 
             <div className="mt-10 text-center">
               <p className="text-muted-foreground text-sm mb-4">
-                Still have questions? We're here to help.
+                Still have questions? We&apos;re here to help.
               </p>
               <LinkButton href="/sign-in?redirect=/dashboard/coaching" variant="outline">
                 Chat with AI Coaching

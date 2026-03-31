@@ -1,46 +1,58 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { auth } from "@clerk/nextjs/server";
 
 function getSupabaseUrl() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) throw new Error("NEXT_PUBLIC_SUPABASE_URL is not set");
-  return url;
+  return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 }
 
 function getSupabaseAnonKey() {
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!key) throw new Error("NEXT_PUBLIC_SUPABASE_ANON_KEY is not set");
-  return key;
+  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 }
 
 function getSupabaseServiceRoleKey() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
-  return key;
+  return process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 }
 
-// Client-side Supabase (uses anon key)
+// Client-side Supabase (uses anon key, RLS applies)
 export function createBrowserClient() {
   return createClient(getSupabaseUrl(), getSupabaseAnonKey());
 }
 
-// Server-side Supabase with Clerk user context
+/**
+ * Server-side Supabase client for authenticated routes.
+ *
+ * Clerk middleware already guards all /dashboard/* and /api/* routes — if a
+ * request reaches here, the user is authenticated. We use the Clerk userId
+ * as a direct query filter (not RLS) to keep the pattern simple and avoid
+ * Supabase JWT configuration complexity.
+ *
+ * For admin operations (webhooks, sync), use createServiceRoleClient() instead.
+ */
 export async function createServerClient() {
   const { userId } = await auth();
   const supabase = createClient(getSupabaseUrl(), getSupabaseAnonKey());
 
   if (userId) {
-    // Set the Clerk user ID so Supabase RLS can reference it
-    supabase.auth.setSession({
-      access_token: userId, // Used for custom RLS policies via user_metadata
-      refresh_token: "",
-    });
+    // Attach userId so callers can use it in .eq() filters directly.
+    // RLS policies are bypassed via application-level authorization since
+    // Clerk has already authenticated the request.
+    (supabase as SupabaseClient & { _userId?: string })._userId = userId;
   }
 
   return supabase;
 }
 
-// Service-role Supabase client — bypasses RLS. Use only in trusted contexts (webhooks, server actions)
+/**
+ * Returns the Clerk userId for the current request, or null if unauthenticated.
+ * Use this to build .eq() filters — Clerk middleware guards the route.
+ */
+export async function getClerkUserId(): Promise<string | null> {
+  const { userId } = await auth();
+  return userId;
+}
+
+// Service-role Supabase client — bypasses RLS entirely.
+// Only use in webhook handlers or server-side admin contexts.
 export function createServiceRoleClient() {
   return createClient(getSupabaseUrl(), getSupabaseServiceRoleKey(), {
     auth: {

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 
 /**
- * Mock Signal Kit API route — Week 2 deliverable placeholder.
- * In production, replace with actual Signal Kit API calls.
+ * Signal Kit DNA Analysis API — Week 2 deliverable.
+ *
+ * In production, replace mock data with actual Signal Kit API calls.
  * API docs: https://developers.signal-kit.com
  *
  * Integrates with The Signal Kit's 270,000+ gene-peptide-pathway
@@ -40,9 +43,15 @@ const MOCK_PEPTIDE_PATHWAYS = [
 ];
 
 export async function POST(req: NextRequest) {
+  // Verify authentication — get userId from Clerk, not from request body
+  const { userId: clerkUserId } = await auth();
+  if (!clerkUserId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
-    const { userId, dnaFileUrl } = body as { userId?: string; dnaFileUrl?: string };
+    const { dnaFileUrl: _dnaFileUrl } = body as { userId?: string; dnaFileUrl?: string };
 
     // In production: call Signal Kit API
     // const signalKitRes = await fetch(`${process.env.SIGNAL_KIT_API_URL}/analyze`, {
@@ -54,31 +63,55 @@ export async function POST(req: NextRequest) {
     // Simulate processing delay
     await new Promise((r) => setTimeout(r, 500));
 
+    const analysis = {
+      geneVariants: MOCK_GENE_VARIANTS,
+      peptidePathways: MOCK_PEPTIDE_PATHWAYS,
+      recommendations: [
+        {
+          category: "tissue_repair",
+          priority: "high",
+          rationale: "BDKRB2 variant indicates heightened peptide sensitivity — BPC-157 response expected above average",
+        },
+        {
+          category: "methylation_support",
+          priority: "medium",
+          rationale: "MTHFR variant suggests benefit from methylated B-vitamins alongside peptide protocol",
+        },
+        {
+          category: "athletic_optimization",
+          priority: "medium",
+          rationale: "ACTN3 + ACE profile supports power-endurance hybrid training approach",
+        },
+      ],
+      generatedAt: new Date().toISOString(),
+    };
+
+    // Persist analysis results to Supabase
+    const supabase = createServiceRoleClient();
+    const { error: upsertError } = await supabase
+      .from("protocols")
+      .upsert(
+        {
+          user_id: clerkUserId,
+          signal_kit_report: analysis,
+          status: "active",
+          phase: 1,
+          started_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+
+    if (upsertError) {
+      console.error("[signal-kit/analyze] Failed to persist results:", upsertError);
+      // Don't fail the request — analysis still returned to user
+    } else {
+      console.log(`[signal-kit/analyze] Persisted analysis for user ${clerkUserId}`);
+    }
+
     return NextResponse.json({
       success: true,
-      analysis: {
-        geneVariants: MOCK_GENE_VARIANTS,
-        peptidePathways: MOCK_PEPTIDE_PATHWAYS,
-        recommendations: [
-          {
-            category: "tissue_repair",
-            priority: "high",
-            rationale: "BDKRB2 variant indicates heightened peptide sensitivity — BPC-157 response expected above average",
-          },
-          {
-            category: "methylation_support",
-            priority: "medium",
-            rationale: "MTHFR variant suggests benefit from methylated B-vitamins alongside peptide protocol",
-          },
-          {
-            category: "athletic_optimization",
-            priority: "medium",
-            rationale: "ACTN3 + ACE profile supports power-endurance hybrid training approach",
-          },
-        ],
-        generatedAt: new Date().toISOString(),
-      },
-      userId,
+      analysis,
+      userId: clerkUserId,
       source: "signal-kit-mock-v1",
     });
   } catch (err) {

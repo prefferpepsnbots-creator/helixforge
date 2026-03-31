@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { currentUser } from "@clerk/nextjs/server";
 import {
   Dna,
   Dumbbell,
@@ -9,13 +10,14 @@ import {
   Clock,
   Zap,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
+import { createServerClient, getClerkUserId } from "@/lib/supabase/server";
 
-const PROTOCOL_PHASES = [
+const STATIC_PHASES = [
   {
     week: "Week 1–4",
     name: "Foundation",
@@ -39,7 +41,7 @@ const PROTOCOL_PHASES = [
   },
 ];
 
-const TODAY_TASKS = [
+const STATIC_TASKS = [
   { label: "Complete baseline strength assessment", done: false },
   { label: "Review genetic blueprint summary", done: true },
   { label: "Upload DNA data (23andMe/AncestryDNA)", done: false },
@@ -47,14 +49,53 @@ const TODAY_TASKS = [
 ];
 
 export default async function DashboardPage() {
-  const name = "Member"; // TODO: pull from Clerk user
+  const clerkUser = await currentUser();
+  const userId = await getClerkUserId();
+  const name = clerkUser?.firstName ?? "Member";
 
-  // TODO: Replace with real Supabase data query
-  // const { data: protocol } = await supabase
-  //   .from("protocols")
-  //   .select("*")
-  //   .eq("user_id", userId)
-  //   .single();
+  // Fetch real protocol data from Supabase if configured
+  let phases = STATIC_PHASES;
+  let tasks = STATIC_TASKS;
+  let daysRemaining = 78;
+  const compliance = 94;
+
+  if (userId) {
+    const supabase = await createServerClient();
+    const { data: protocol } = await supabase
+      .from("protocols")
+      .select("status, phase, started_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (protocol) {
+      // Calculate days remaining from protocol start date
+      if (protocol.started_at) {
+        const started = new Date(protocol.started_at);
+        const now = new Date();
+        const elapsed = Math.floor((now.getTime() - started.getTime()) / (1000 * 60 * 60 * 24));
+        daysRemaining = Math.max(0, 90 - elapsed);
+      }
+
+      // Map stored phase progress to UI phases
+      phases = phases.map((p, i) => ({
+        ...p,
+        status: i + 1 === protocol.phase ? "active" : i + 1 < protocol.phase ? "completed" : "upcoming",
+        progress: i + 1 < protocol.phase ? 100 : i + 1 === protocol.phase ? 33 : 0,
+      }));
+    }
+
+    // Fetch user's checklist tasks
+    const { data: userTasks } = await supabase
+      .from("user_tasks")
+      .select("label, completed")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(4);
+
+    if (userTasks && userTasks.length > 0) {
+      tasks = userTasks.map((t) => ({ label: t.label, done: t.completed }));
+    }
+  }
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto space-y-8">
@@ -79,9 +120,9 @@ export default async function DashboardPage() {
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Protocol Status", value: "Active", icon: Zap, color: "text-primary" },
-          { label: "Current Phase", value: "Foundation", icon: Clock, color: "text-blue-500" },
-          { label: "Days Remaining", value: "78", icon: TrendingUp, color: "text-green-500" },
-          { label: "Compliance", value: "94%", icon: CheckCircle2, color: "text-emerald-500" },
+          { label: "Current Phase", value: phases.find((p) => p.status === "active")?.name ?? "Foundation", icon: Clock, color: "text-blue-500" },
+          { label: "Days Remaining", value: String(daysRemaining), icon: TrendingUp, color: "text-green-500" },
+          { label: "Compliance", value: `${compliance}%`, icon: CheckCircle2, color: "text-emerald-500" },
         ].map(({ label, value, icon: Icon, color }) => (
           <Card key={label} className="p-4">
             <div className="flex items-center gap-3">
@@ -101,7 +142,7 @@ export default async function DashboardPage() {
         {/* Protocol Phases */}
         <div className="lg:col-span-2 space-y-4">
           <h2 className="text-xl font-semibold">90-Day Protocol Phases</h2>
-          {PROTOCOL_PHASES.map((phase) => (
+          {phases.map((phase) => (
             <Card key={phase.name} className={`p-5 ${phase.status === "active" ? "border-primary/40" : ""}`}>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -119,6 +160,9 @@ export default async function DashboardPage() {
                 {phase.status === "upcoming" && (
                   <Badge variant="secondary">Upcoming</Badge>
                 )}
+                {phase.status === "completed" && (
+                  <Badge variant="default" className="bg-green-600">Completed</Badge>
+                )}
               </div>
               <p className="text-sm text-muted-foreground mb-4">{phase.description}</p>
               {phase.status === "active" ? (
@@ -127,7 +171,7 @@ export default async function DashboardPage() {
                 <div className="h-2 rounded-full bg-muted" />
               )}
               <p className="text-xs text-muted-foreground mt-2">
-                {phase.status === "active" ? `${phase.progress}% complete` : "Not started"}
+                {phase.status === "active" ? `${phase.progress}% complete` : phase.status === "completed" ? "Done" : "Not started"}
               </p>
             </Card>
           ))}
@@ -138,7 +182,7 @@ export default async function DashboardPage() {
           <h2 className="text-xl font-semibold">Today&apos;s Tasks</h2>
           <Card className="p-5">
             <ul className="space-y-3">
-              {TODAY_TASKS.map(({ label, done }) => (
+              {tasks.map(({ label, done }) => (
                 <li key={label} className="flex items-start gap-3">
                   <div className={`flex h-5 w-5 items-center justify-center rounded-full border mt-0.5 shrink-0 ${done ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
                     {done && <CheckCircle2 className="h-3.5 w-3.5 text-primary-foreground" />}

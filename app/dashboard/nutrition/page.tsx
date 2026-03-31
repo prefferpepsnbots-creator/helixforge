@@ -124,7 +124,7 @@ export default function NutritionPage() {
       <Card className="p-5 bg-muted/30 border-dashed">
         <p className="text-sm text-muted-foreground">
           <strong>Note:</strong> This is a starting template. Your AI coach can help you
-          adjust macros based on training volume, body composition changes, and how you're
+          adjust macros based on training volume, body composition changes, and how you&apos;re
           responding to the peptide protocol. Share your progress logs for personalized tweaks.
         </p>
       </Card>

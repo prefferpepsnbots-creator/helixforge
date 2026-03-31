@@ -2,9 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
-import { Brain, Send, Loader2, RefreshCw, Info } from "lucide-react";
+import { Brain, Send, Loader2, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 
 interface Message {

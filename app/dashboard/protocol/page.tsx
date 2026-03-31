@@ -1,19 +1,33 @@
 import Link from "next/link";
 import { Dna, CheckCircle2, ArrowRight, Clock, TrendingUp } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
 import { LinkButton } from "@/components/ui/link-button";
 import { Separator } from "@/components/ui/separator";
+import { createServerClient, getClerkUserId } from "@/lib/supabase/server";
 
-const PROTOCOL_PHASES = [
+type PhaseStatus = "active" | "upcoming" | "completed";
+
+interface ProtocolPhase {
+  week: string;
+  name: string;
+  description: string;
+  status: PhaseStatus;
+  progress: number;
+  peptideStack: string[];
+  training: string;
+  nutrition: string;
+  tasks: { label: string; done: boolean }[];
+}
+
+const DEFAULT_PHASES: ProtocolPhase[] = [
   {
     week: "Week 1–4",
     name: "Foundation",
     description:
       "Genetic analysis review, baseline assessments, and foundational support optimization. Establish baseline biomarkers and prepare tissue for peptide pathway activation.",
-    status: "active",
+    status: "active" as const,
     progress: 25,
     peptideStack: ["Baseline bloodwork", "Methylated B-complex", "Vitamin D + K2"],
     training: "Assessment & neuromuscular priming",
@@ -30,7 +44,7 @@ const PROTOCOL_PHASES = [
     name: "Optimization",
     description:
       "Peptide pathway activation protocols begin. BPC-157 and TB-500 introduced with training protocol calibrated to your ACTN3/ACE expression profile.",
-    status: "upcoming",
+    status: "upcoming" as const,
     progress: 0,
     peptideStack: ["BPC-157", "TB-500", "Selank (if anxiety/stress present)"],
     training: "Accumulation phase — volume emphasis",
@@ -46,7 +60,7 @@ const PROTOCOL_PHASES = [
     name: "Consolidation",
     description:
       "Training adaptation consolidation and nutrition refinement. Assess peptide response and make evidence-based protocol adjustments.",
-    status: "upcoming",
+    status: "upcoming" as const,
     progress: 0,
     peptideStack: ["Peptide cycling review", "Adjustment based on biomarkers"],
     training: "Intensification phase — load emphasis",
@@ -59,14 +73,71 @@ const PROTOCOL_PHASES = [
   },
 ];
 
-const QUICK_STATS = [
-  { label: "Days Active", value: "10", icon: Clock },
-  { label: "Current Phase", value: "Foundation", icon: Dna },
-  { label: "Compliance", value: "75%", icon: CheckCircle2 },
-  { label: "Next Milestone", value: "Week 5", icon: TrendingUp },
-];
+export default async function ProtocolPage() {
+  const userId = await getClerkUserId();
+  let phases = DEFAULT_PHASES;
+  let hasDnaAnalysis = false;
+  let signalKitReport: Record<string, unknown> | null = null;
 
-export default function ProtocolPage() {
+  if (userId) {
+    const supabase = await createServerClient();
+
+    // Fetch protocol with DNA analysis results
+    const { data: protocol } = await supabase
+      .from("protocols")
+      .select("status, phase, started_at, signal_kit_report, protocol_blueprint")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (protocol) {
+      hasDnaAnalysis = !!protocol.signal_kit_report;
+      signalKitReport = protocol.signal_kit_report as Record<string, unknown> | null;
+
+      // Update phase statuses based on stored protocol state
+      phases = phases.map((phase, i) => {
+        const phaseNum = i + 1;
+        if (phaseNum < (protocol.phase ?? 1)) {
+          return { ...phase, status: "completed" as const, progress: 100 };
+        }
+        if (phaseNum === (protocol.phase ?? 1)) {
+          return { ...phase, status: "active" as const };
+        }
+        return { ...phase, status: "upcoming" as const, progress: 0 };
+      });
+    }
+
+    // Fetch user tasks to populate task completion status
+    const { data: userTasks } = await supabase
+      .from("user_tasks")
+      .select("label, completed")
+      .eq("user_id", userId)
+      .order("created_at");
+
+    if (userTasks && userTasks.length > 0) {
+      phases = phases.map((phase) => ({
+        ...phase,
+        tasks: phase.tasks.map((task) => {
+          const match = userTasks.find((ut) => ut.label.toLowerCase().includes(task.label.toLowerCase()));
+          return match ? { ...task, done: match.completed } : task;
+        }),
+      }));
+    }
+  }
+
+  // Calculate stats from phase data
+  const activePhase = phases.find((p) => p.status === "active");
+  const completedCount = phases.filter((p) => p.status === "completed").length;
+  const totalTasks = phases.flatMap((p) => p.tasks).length;
+  const doneTasks = phases.flatMap((p) => p.tasks).filter((t) => t.done).length;
+  const compliance = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : null;
+
+  const stats = [
+    { label: "Days Active", value: completedCount > 0 ? String(completedCount * 28) : "10", icon: Clock },
+    { label: "Current Phase", value: activePhase?.name ?? "Foundation", icon: Dna },
+    { label: "Compliance", value: compliance !== null ? `${compliance}%` : "75%", icon: CheckCircle2 },
+    { label: "Next Milestone", value: activePhase ? `Week ${(phases.indexOf(activePhase) + 1) * 4 + 1}` : "Week 5", icon: TrendingUp },
+  ];
+
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto space-y-8">
       {/* Header */}
@@ -79,13 +150,13 @@ export default function ProtocolPage() {
         </div>
         <LinkButton href="/dashboard/dna">
           <Dna className="mr-2 h-4 w-4" />
-          {false ? "View Genetic Analysis" : "Upload DNA"}
+          {hasDnaAnalysis ? "View Genetic Analysis" : "Upload DNA"}
         </LinkButton>
       </div>
 
       {/* Quick stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {QUICK_STATS.map(({ label, value, icon: Icon }) => (
+        {stats.map(({ label, value, icon: Icon }) => (
           <Card key={label} className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 shrink-0">
@@ -100,10 +171,30 @@ export default function ProtocolPage() {
         ))}
       </div>
 
+      {/* DNA Analysis Summary (shown if analysis exists) */}
+      {signalKitReport && (
+        <Card className="p-5 bg-primary/5 border-primary/20">
+          <div className="flex items-center gap-2 mb-2">
+            <Dna className="h-4 w-4 text-primary" />
+            <p className="font-semibold text-sm">Genetic Analysis Active</p>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Your DNA analysis from{" "}
+            {signalKitReport.generatedAt
+              ? new Date(signalKitReport.generatedAt as string).toLocaleDateString()
+              : "your last upload"}{" "}
+            is powering this protocol.{" "}
+            <Link href="/dashboard/dna" className="text-primary underline">
+              View full analysis
+            </Link>
+          </p>
+        </Card>
+      )}
+
       {/* Protocol Phases */}
       <div className="space-y-6">
         <h2 className="text-xl font-semibold">Protocol Phases</h2>
-        {PROTOCOL_PHASES.map((phase, i) => (
+        {phases.map((phase, i) => (
           <Card key={phase.name} className="overflow-hidden">
             {/* Phase header */}
             <div
@@ -128,7 +219,10 @@ export default function ProtocolPage() {
                     In Progress
                   </Badge>
                 )}
-                {i < PROTOCOL_PHASES.length - 1 && (
+                {phase.status === "completed" && (
+                  <Badge variant="default" className="bg-green-600">Completed</Badge>
+                )}
+                {i < phases.length - 1 && (
                   <ArrowRight className="h-4 w-4 text-muted-foreground" />
                 )}
               </div>

@@ -85,9 +85,8 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { message, history } = body as {
+    const { message } = body as {
       message: string;
-      history?: Array<{ role: string; content: string }>;
     };
 
     if (!message?.trim()) {
@@ -111,7 +110,7 @@ export async function POST(req: NextRequest) {
       // Non-fatal — proceed without user context
     }
 
-    const systemPrompt = buildSystemPrompt(userContext);
+    const _systemPrompt = buildSystemPrompt(userContext);
 
     // In production: stream from OpenAI/Anthropic
     // const response = await openai.chat.completions.create({

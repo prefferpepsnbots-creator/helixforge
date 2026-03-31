@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-const ACCEPTED_FORMATS = [
+const _ACCEPTED_FORMATS = [
   { label: "23andMe", ext: ".txt", icon: "23andMe" },
   { label: "AncestryDNA", ext: ".txt", icon: "AncestryDNA" },
 ];
@@ -37,7 +37,7 @@ interface AnalysisResult {
 
 export default function DnaUploadPage() {
   const router = useRouter();
-  const { user, isSignedIn } = useUser();
+  const { user } = useUser();
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [status, setStatus] = useState<"idle" | "uploading" | "analyzing" | "done" | "error">("idle");
@@ -70,7 +70,11 @@ export default function DnaUploadPage() {
   );
 
   async function handleAnalyze() {
-    if (!file || !user) return;
+    if (!file) return;
+    if (!user) {
+      router.push("/sign-in?redirect=/dashboard/dna");
+      return;
+    }
 
     setStatus("uploading");
 
@@ -82,11 +86,11 @@ export default function DnaUploadPage() {
 
       setStatus("analyzing");
 
-      // Call Signal Kit analysis API
+      // Call Signal Kit analysis API — userId verified server-side via Clerk auth
       const res = await fetch("/api/signal-kit/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
+        body: JSON.stringify({}),
       });
 
       if (!res.ok) throw new Error("Analysis failed");

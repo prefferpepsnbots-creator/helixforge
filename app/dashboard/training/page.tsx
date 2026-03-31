@@ -1,8 +1,7 @@
-import { Dumbbell, TrendingUp, Zap, Clock } from "lucide-react";
+import { Dumbbell, Zap, Clock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
 
 const GENETIC_INSIGHTS = [
   { gene: "ACTN3", finding: "Power-endurance hybrid type", implication: "Compound emphasis, moderate volume" },
