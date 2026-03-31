@@ -17,9 +17,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-const _ACCEPTED_FORMATS = [
-  { label: "23andMe", ext: ".txt", icon: "23andMe" },
-  { label: "AncestryDNA", ext: ".txt", icon: "AncestryDNA" },
+const ACCEPTED_FORMATS = [
+  { label: "23andMe", ext: ".txt" },
+  { label: "AncestryDNA", ext: ".txt" },
+  { label: "MyHeritage", ext: ".txt/.zip" },
+  { label: "FTDNA", ext: ".csv" },
+  { label: "LivingDNA", ext: ".csv" },
+  { label: "Nebula Genomics", ext: ".zip" },
 ];
 
 const STEPS = [
@@ -45,9 +49,15 @@ export default function DnaUploadPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const handleFile = useCallback((f: File) => {
-    const ext = f.name.toLowerCase().endsWith(".txt") ? ".txt" : "";
+    const ext = f.name.toLowerCase().endsWith(".txt")
+      ? ".txt"
+      : f.name.toLowerCase().endsWith(".csv")
+      ? ".csv"
+      : f.name.toLowerCase().endsWith(".zip")
+      ? ".zip"
+      : "";
     if (!ext) {
-      toast.error("Only .txt files are accepted (23andMe or AncestryDNA exports)");
+      toast.error("Only .txt, .csv, or .zip files are accepted (23andMe, AncestryDNA, FTDNA, MyHeritage, LivingDNA, Nebula) — please export your raw data first");
       return;
     }
     if (f.size > 50 * 1024 * 1024) {
@@ -79,18 +89,27 @@ export default function DnaUploadPage() {
     setStatus("uploading");
 
     try {
-      // Upload file to Supabase Storage (mock — in production, upload to a private bucket)
-      // const formData = new FormData();
-      // formData.append("file", file);
-      // await fetch("/api/dna/upload", { method: "POST", body: formData });
+      // Step 1: Upload DNA file to Supabase private storage
+      const uploadForm = new FormData();
+      uploadForm.append("file", file);
+      const uploadRes = await fetch("/api/dna/upload", { method: "POST", body: uploadForm });
+
+      if (!uploadRes.ok) {
+        const err = await uploadRes.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error ?? "File upload failed");
+      }
+
+      const uploadData = await uploadRes.json();
+      const dnaFileUrl = uploadData.fileUrl as string;
 
       setStatus("analyzing");
 
-      // Call Signal Kit analysis API — userId verified server-side via Clerk auth
+      // Step 2: Call Signal Kit analysis — userId verified server-side via Clerk auth
+      // Server-side: calls signal-kit service (Sequencing.com RTP) with retry + mock fallback
       const res = await fetch("/api/signal-kit/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ dnaFileUrl }),
       });
 
       if (!res.ok) throw new Error("Analysis failed");
@@ -158,7 +177,7 @@ export default function DnaUploadPage() {
             {/* Supported formats */}
             <div className="flex flex-wrap gap-2">
               <span className="text-sm text-muted-foreground">Supported formats:</span>
-              {["23andMe RAW Data", "AncestryDNA RAW Data"].map((fmt) => (
+              {["23andMe", "AncestryDNA", "MyHeritage", "FTDNA", "LivingDNA", "Nebula Genomics"].map((fmt) => (
                 <Badge key={fmt} variant="secondary">
                   {fmt}
                 </Badge>
@@ -178,7 +197,7 @@ export default function DnaUploadPage() {
               onClick={() => {
                 const input = window.document.createElement("input");
                 input.type = "file";
-                input.accept = ".txt";
+                input.accept = ".txt,.csv,.zip";
                 input.onchange = (e) => {
                   const f = (e.target as HTMLInputElement).files?.[0];
                   if (f) handleFile(f);
@@ -210,7 +229,7 @@ export default function DnaUploadPage() {
                   <Upload className="h-10 w-10 text-muted-foreground mb-4" />
                   <p className="font-medium mb-1">Drop your DNA file here</p>
                   <p className="text-sm text-muted-foreground">
-                    or click to browse &bull; .txt files only &bull; Max 50MB
+                    or click to browse &bull; .txt, .csv, .zip &bull; Max 100MB
                   </p>
                 </>
               )}
