@@ -71,11 +71,7 @@ function CheckoutContent() {
       const res = await fetch("/api/stripe/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plan: planKey,
-          userId: user?.id,
-          email: user?.primaryEmailAddress?.emailAddress,
-        }),
+        body: JSON.stringify({ plan: planKey }),
       });
 
       const data = await res.json();

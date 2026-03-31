@@ -110,3 +110,76 @@ export async function sendOnboardingEmail({
 
   return data;
 }
+
+export async function sendPaymentFailedEmail({
+  to,
+  name,
+  plan,
+  amountDue,
+  invoiceId,
+}: {
+  to: string;
+  name?: string;
+  plan: "protocol" | "coaching";
+  amountDue: number;
+  invoiceId: string;
+}) {
+  const resend = getResend();
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://helixforge.com";
+  const planLabel = plan === "coaching" ? "AI Coaching" : "Protocol Access";
+
+  const { data, error } = await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Action Required — Payment failed for HelixForge",
+    html: `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a1a; line-height: 1.6; }
+    .container { max-width: 600px; margin: 0 auto; padding: 32px 16px; }
+    .alert { background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    .cta { display: inline-block; background: #dc2626; color: #fff !important; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin-top: 16px; }
+    .footer { font-size: 12px; color: #666; margin-top: 32px; border-top: 1px solid #e5e5e5; padding-top: 16px; }
+    .disclaimer { font-size: 11px; color: #888; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <p>Hi${name ? ` ${name}` : ""},</p>
+
+    <div class="alert">
+      <strong>Your recent payment for ${planLabel} could not be processed.</strong>
+      <p style="margin: 8px 0 0;">Amount: <strong>$${(amountDue / 100).toFixed(2)}</strong></p>
+      <p style="margin: 4px 0 0;">Invoice: ${invoiceId}</p>
+    </div>
+
+    <p>Please update your payment method in the next 7 days to keep your access active. After that, your subscription will be canceled and access to HelixForge will be suspended.</p>
+
+    <a href="${appUrl}/dashboard/settings" class="cta">Update Payment Method</a>
+
+    <p style="margin-top: 24px;">If you believe this is an error or need help, reply to this email or contact support.</p>
+
+    <div class="disclaimer">
+      <strong>Medical Disclaimer:</strong> HelixForge does not sell, compound, or prescribe peptides.
+      This email contains educational information only.
+    </div>
+
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} HelixForge Wellness.
+    </div>
+  </div>
+</body>
+</html>
+    `,
+  });
+
+  if (error) {
+    console.error("[email/payment-failed] Send failed:", error);
+    throw error;
+  }
+
+  return data;
+}

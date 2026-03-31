@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createServiceRoleClient } from "@/lib/supabase/server";
+import { sendPaymentFailedEmail } from "@/lib/email/send";
 
 // Lazy initialization to avoid build-time failures
 function getStripe(): Stripe {
@@ -142,7 +143,33 @@ export async function POST(req: NextRequest) {
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
         console.warn(`[stripe] Payment failed for invoice: ${invoice.id}`);
-        // TODO: Send payment failure notification email via Resend
+
+        try {
+          const customerId = invoice.customer as string;
+          const amountDue = invoice.amount_due;
+
+          // subscription may not be on Invoice type directly — access via raw Stripe object
+
+          // Get user's email from Stripe
+          const customer = await stripe.customers.retrieve(customerId);
+          const email =
+            !customer.deleted && customer.email
+              ? customer.email
+              : invoice.customer_email ?? undefined;
+
+          if (email && process.env.RESEND_API_KEY) {
+            await sendPaymentFailedEmail({
+              to: email,
+              plan: "coaching",
+              amountDue,
+              invoiceId: invoice.id,
+            });
+            console.log(`[stripe] Payment failure email sent to ${email}`);
+          }
+        } catch (emailErr) {
+          // Non-fatal — log but don't fail the webhook
+          console.error("[stripe] Failed to send payment failure email:", emailErr);
+        }
         break;
       }
 
