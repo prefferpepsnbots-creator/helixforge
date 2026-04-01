@@ -1,36 +1,117 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# HelixForge Wellness
 
-## Getting Started
+AI-powered, DNA-driven 90-day peptide optimization protocols. Users upload their genetic data, receive a personalized protocol, and get ongoing AI coaching — all while their licensed physician remains the prescribing authority.
 
-First, run the development server:
+> **We never sell, compound, or prescribe peptides.** Education, genetic blueprints, training/nutrition plans, and AI coaching only.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js 15 (App Router) + Tailwind CSS v4 + shadcn/ui |
+| Auth | Clerk 7.x |
+| Database | Supabase (Postgres + Storage + Service Role) |
+| Payments | Stripe ($297 protocol + $97/mo coaching) |
+| AI | OpenAI GPT-4o-mini (streaming) |
+| DNA | Sequencing.com Signal Kit API (270K+ gene-peptide-pathway connections) |
+| Email | Resend |
+| Hosting | Vercel |
+
+## Routes
+
+```
+/                          Landing page (conversion-focused)
+/checkout                  Stripe Checkout flow
+/sign-in, /sign-up         Clerk auth pages
+/dashboard                 Overview + protocol summary
+/dashboard/protocol        90-day phase display + task checklist
+/dashboard/dna             DNA file upload + Signal Kit analysis
+/dashboard/training        Exercise library by protocol phase
+/dashboard/nutrition       Macro targets + meal suggestions
+/dashboard/coaching        AI coaching chat (OpenAI streaming)
+/dashboard/settings        Profile + plan management
+/dashboard/admin           Platform metrics (admin-only)
+/api/stripe/webhook        Payment fulfillment + onboarding trigger
+/api/coaching/chat         AI coaching endpoint
+/api/signal-kit/analyze    DNA analysis (Sequencing.com RTP path)
+/api/dna/upload            DNA file upload to Supabase Storage
+/api/admin/metrics         Aggregated platform metrics
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Local Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Clone and install
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+git clone https://github.com/prefferpepsnbots-creator/helixforge.git
+cd helixforge
+pnpm install
+```
 
-## Learn More
+### 2. Copy env vars
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+cp .env.example .env.local
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Fill in all variables (see [.env.example](./.env.example) for full documentation with sources).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 3. Supabase setup
 
-## Deploy on Vercel
+1. Create a project at [supabase.com](https://supabase.com)
+2. Run the schema migrations in `supabase/migrations/`
+3. Enable **Row Level Security (RLS)** on all tables
+4. Create a `dna-files` storage bucket (private, no public access)
+5. Add your service role key to `SUPABASE_SERVICE_ROLE_KEY`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### 4. Clerk setup
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Create an app at [dashboard.clerk.com](https://dashboard.clerk.com)
+2. Copy publishable key + secret key
+3. Set redirect URLs: `/sign-in`, `/sign-up`, `/dashboard`
+4. Copy user IDs of admin users to `ADMIN_USER_IDS` (comma-separated)
+
+### 5. Stripe setup
+
+1. Create products: "Protocol" ($297 one-time) + "Coaching" ($97/mo subscription)
+2. Copy Price IDs to `STRIPE_PRICE_PROTOCOL` + `STRIPE_PRICE_COACHING`
+3. Set `STRIPE_WEBHOOK_SECRET` from `stripe listen --forward-to localhost:3000/api/stripe/webhook`
+
+### 6. Run
+
+```bash
+pnpm dev
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+## DNA File Support
+
+The parser handles these formats natively:
+
+| Provider | Format | Extension |
+|---|---|---|
+| 23andMe | rsID per line | `.txt` |
+| AncestryDNA | rsID + chromosome | `.txt` |
+| FTDNA | CSV export | `.csv` |
+| Nebula Genomics | CSV | `.csv` |
+| MyHeritage | ZIP (contains txt) | `.zip` |
+
+Max file size: **100 MB**. Files are stored in Supabase Storage under the user's ID with a 48-hour auto-expiry signed URL.
+
+## Security Notes
+
+- Clerk JWT is verified server-side on every protected API call
+- Supabase reads use Clerk-user-scoped queries; writes use service role (never expose service role to client)
+- DNA files are private, stored under authenticated user prefixes with RLS
+- Stripe webhook signature is verified before processing any events
+- Admin routes are gated by `ADMIN_USER_IDS` allowlist (Clerk user IDs)
+- Health/physician disclaimer is surfaced on every AI coaching response
+
+## Deploy
+
+See [CLAUDE.md](./CLAUDE.md) for the full Vercel deploy checklist.
+
+## License
+
+Proprietary — HelixForge Wellness Inc.
