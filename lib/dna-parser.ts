@@ -194,30 +194,6 @@ function parseCSVSnp(line: string): SnpRecord | null {
   return { rsid, chromosome, position, allele1, allele2, format: "FTDNA" };
 }
 
-// ─── Nebula Genomics Parser ────────────────────────────────────────────────────
-// Tab-separated with Nebula header; columns vary but rsid is always first
-// Typical Nebula format: rsid  chromosome  position  ref  alt  ...  genotype
-// Some Nebula files use tab with extra metadata columns
-
-function parseNebulaSnp(line: string): SnpRecord | null {
-  const parts = line.split("\t");
-  if (parts.length < 5) return null;
-
-  const rsid = parts[0].trim();
-  if (!rsid.startsWith("rs")) return null;
-
-  const chromosome = parts[1].trim();
-  const position = parseInt(parts[2], 10);
-  if (isNaN(position)) return null;
-
-  // Nebula sometimes encodes genotype as ref/alt in column 4+5 or as last two columns
-  // Look for a "call" column or infer from ref/alt
-  const allele1 = parts[3]?.trim() ?? "N";
-  const allele2 = parts.length > 4 ? parts[4]?.trim() ?? "N" : "N";
-
-  return { rsid, chromosome, position, allele1, allele2: allele2 === allele1 ? allele1 : allele2, format: "Nebula" };
-}
-
 // ─── Main Parser ───────────────────────────────────────────────────────────────
 
 export interface ParseResult {

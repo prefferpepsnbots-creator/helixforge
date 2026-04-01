@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  const { error: uploadError, data: uploadData } = await supabase.storage
+  const { error: uploadError } = await supabase.storage
     .from(bucket)
     .upload(storagePath, buffer, {
       contentType: file.type || "application/octet-stream",

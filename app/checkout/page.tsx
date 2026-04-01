@@ -47,7 +47,7 @@ const PLAN_DETAILS = {
 function CheckoutContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, isSignedIn, isLoaded } = useUser();
+  const { isSignedIn, isLoaded } = useUser();
   const [isLoading, setIsLoading] = useState(false);
 
   const planKey = (searchParams.get("plan") ?? "protocol") as "protocol" | "coaching";

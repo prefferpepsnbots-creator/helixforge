@@ -17,15 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
-const ACCEPTED_FORMATS = [
-  { label: "23andMe", ext: ".txt" },
-  { label: "AncestryDNA", ext: ".txt" },
-  { label: "MyHeritage", ext: ".txt/.zip" },
-  { label: "FTDNA", ext: ".csv" },
-  { label: "LivingDNA", ext: ".csv" },
-  { label: "Nebula Genomics", ext: ".zip" },
-];
-
 const STEPS = [
   { id: 1, label: "Upload DNA File" },
   { id: 2, label: "Analyze & Process" },

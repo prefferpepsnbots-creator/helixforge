@@ -16,7 +16,7 @@ function isAdminUser(userId: string | null): boolean {
   return adminIds.split(",").map((id) => id.trim()).includes(userId);
 }
 
-export async function GET(req: NextRequest) {
+export async function GET(_req: NextRequest) {
   const { userId } = await auth();
 
   if (!isAdminUser(userId)) {

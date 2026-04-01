@@ -7,6 +7,16 @@ const compat = new FlatCompat({
 const eslintConfig = compat.config({
   extends: ["next/core-web-vitals", "next/typescript"],
   ignorePatterns: [".next/**", "out/**", "build/**", "next-env.d.ts"],
+  rules: {
+    "@typescript-eslint/no-unused-vars": [
+      "warn",
+      {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+      },
+    ],
+  },
 });
 
 export default eslintConfig;
